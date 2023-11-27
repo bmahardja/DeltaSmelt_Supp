@@ -3,7 +3,7 @@
 # Date: 2023-11-22
 
 # Set working directory
-root <- "C:/Users/bmahardja/Documents/GitHub/DeltaSmelt_SwimDistance"
+root <- "C:/Users/bmahardja/Documents/GitHub/DeltaSmelt_Supp"
 setwd(root)
 
 data_root<-file.path(root,"data")
@@ -32,7 +32,7 @@ raster_baydelta<-raster(file.path(data_root,"baydelta.tif"))
 # Read the pre-processed raster file from Ryan since the conversion takes 2 hours 
 raster_baydelta_tr <- readRDS(file.path(data_root,"raster_baydelta_tr.rds"))
 
-
+plot(raster_baydelta_tr)
 # Facilities data
 
 facility_data<- data.frame(Latitude=c(37.825957,37.816984), Longitude= c(-121.595535,-121.556881), Facility=c("Skinner","TFCF"))
@@ -104,3 +104,7 @@ Least_Cost_data_wild <-data.frame(dist_meters = as.vector(as.matrix(dist_facil))
                                                                paste, sep="xxx"))) %>%
   mutate(Station=sub("xxx.*","", comparison),Facility=sub(".*xxx","", comparison),dist_km=dist_meters/1000) %>%
   dplyr::select(Station,Facility,dist_km)
+
+# Export dataset out
+write.csv(df_subset_rep_station,file=file.path(output_root,"wild_fish_station_data.csv"),row.names = F)
+write.csv(Least_Cost_data_wild,file=file.path(output_root,"wild_fish_leastcost_distance_from_salvage_facilities.csv"),row.names = F)
