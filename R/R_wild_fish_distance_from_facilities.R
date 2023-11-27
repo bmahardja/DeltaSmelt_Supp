@@ -1,6 +1,6 @@
 # Purpose: Prepare swim distance data for analysis for year 1
 # Author: Brian Mahardja
-# Date: 2023-09-22
+# Date: 2023-11-22
 
 # Set working directory
 root <- "C:/Users/bmahardja/Documents/GitHub/DeltaSmelt_SwimDistance"
@@ -27,6 +27,8 @@ library(deltafish)
 library(mapview)
 
 
+# Read the TIF file just to get the crs
+raster_baydelta<-raster(file.path(data_root,"baydelta.tif"))
 # Read the pre-processed raster file from Ryan since the conversion takes 2 hours 
 raster_baydelta_tr <- readRDS(file.path(data_root,"raster_baydelta_tr.rds"))
 
@@ -86,7 +88,7 @@ df_subset_rep_sf <- df_subset_rep %>% group_by(Station) %>%
   st_transform(crs = st_crs(raster_baydelta))
 mapview(df_subset_rep_sf)
 
-# Calculate 2022 distances with least cost analysis
+# Calculate distances with least cost analysis
 dist_facil <- costDistance(raster_baydelta_tr,
                           fromCoords = as(as_Spatial(df_subset_rep_sf), "SpatialPoints"),
                           toCoords = as(as_Spatial(facility_data_sf), "SpatialPoints"))
