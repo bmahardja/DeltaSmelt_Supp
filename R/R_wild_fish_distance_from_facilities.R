@@ -32,9 +32,7 @@ raster_baydelta<-raster(file.path(data_root,"baydelta.tif"))
 # Read the pre-processed raster file from Ryan since the conversion takes 2 hours 
 raster_baydelta_tr <- readRDS(file.path(data_root,"raster_baydelta_tr.rds"))
 
-plot(raster_baydelta_tr)
-# Facilities data
-
+# Enter facilities data (long and lat)
 facility_data<- data.frame(Latitude=c(37.825957,37.816984), Longitude= c(-121.595535,-121.556881), Facility=c("Skinner","TFCF"))
 
 facility_data_sf <- facility_data %>% 
@@ -53,47 +51,43 @@ fish_smelt <- fish %>%
 # do a join and collect the resulting data frame
 # collect executes the sql query and gives you a table
 df <- left_join(surv, fish_smelt) %>% 
-  collect() 
-
-# Subset to just December to April
-# open our two data files
-surv <- open_survey()
-fish <- open_fish()
-
-# filter for sources and taxa of interest
-fish_smelt <- fish %>% 
-  filter(Taxa %in% c("Hypomesus transpacificus"))
-
-
-# do a join and collect the resulting data frame
-# collect executes the sql query and gives you a table
-df <- left_join(surv, fish_smelt) %>% 
   collect() %>% filter(Count>0)
 
-# Subset to just December-April
-df_subset <- df %>% mutate(WY=ifelse(month(Date)>9,year(Date)+1,year(Date))) %>% filter(month(Date) %in% c(12,1:4)) %>%
+# Subset to just November-April
+df_subset <- df %>% mutate(WY=ifelse(month(Date)>9,year(Date)+1,year(Date))) %>% filter(month(Date) %in% c(11,12,1:4)) %>%
   # Filter out NA latitude and longitude
   filter(!is.na(Longitude)&!is.na(Latitude))
 
+# Filter out juveniles and replicate row by fish count
 df_subset_rep <- df_subset %>% filter(Length>=50)
 
 df_subset_rep<-df_subset_rep[rep(row.names(df_subset_rep),df_subset_rep$Count),1:28] %>% mutate(Count=1)
 
+# Extract stations at which Delta Smelt were observed (for checking on maps later)
 df_subset_rep_station <- df_subset_rep %>% group_by(Station) %>% 
   summarise(Longitude=median(Longitude),Latitude=median(Latitude))
 
+# Extract stations at which Delta Smelt were observed and make them spatial
 df_subset_rep_sf <- df_subset_rep %>% group_by(Station) %>% 
   summarise(Longitude=median(Longitude),Latitude=median(Latitude)) %>%
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>%
   st_transform(crs = st_crs(raster_baydelta))
 mapview(df_subset_rep_sf)
 
+#
+#20-34-LSSC02
+#TFCF
+#Inf
+#75
+#208
+#Skinner
+#Inf
+
+
 # Calculate distances with least cost analysis
 dist_facil <- costDistance(raster_baydelta_tr,
                           fromCoords = as(as_Spatial(df_subset_rep_sf), "SpatialPoints"),
                           toCoords = as(as_Spatial(facility_data_sf), "SpatialPoints"))
-
-
 rownames(dist_facil)<-as.vector(df_subset_rep_sf$Station)
 colnames(dist_facil)<-as.vector(facility_data_sf$Facility)
 
@@ -108,3 +102,67 @@ Least_Cost_data_wild <-data.frame(dist_meters = as.vector(as.matrix(dist_facil))
 # Export dataset out
 write.csv(df_subset_rep_station,file=file.path(output_root,"wild_fish_station_data.csv"),row.names = F)
 write.csv(Least_Cost_data_wild,file=file.path(output_root,"wild_fish_leastcost_distance_from_salvage_facilities.csv"),row.names = F)
+
+# Average distance
+Least_Cost_data_wild<- read.csv(file=file.path(output_root,"wild_fish_leastcost_distance_from_salvage_facilities.csv"))
+
+Least_Cost_data_wild_avg <- Least_Cost_data_wild %>% group_by(Station) %>% summarise(dist_km_facility=mean(dist_km))
+df_subset_rep <- df_subset_rep %>% left_join(Least_Cost_data_wild_avg)
+
+df_subset_dist <- df_subset_rep %>% mutate(Month=month(Date)) %>% group_by(WY,Month) %>% 
+  summarise(Date_median=median(Date),dist_km_facility=mean(dist_km_facility),dist_km_sd=sd(dist_km_facility,na.rm=T),Count=sum(Count))
+
+
+write.csv(df_subset_dist,file=file.path(output_root,"wild_fish_average_distance_from_salvage_facilities.csv"),row.names = F)
+
+df_subset_dist <- df_subset_dist %>% filter(dist_km_facility != Inf) %>% filter(Count>=20)
+
+
+ggplot(data=df_subset_dist) + geom_boxplot(aes(x=as.factor(Month),y=dist_km_facility))
+
+tiff(filename=file.path(output_root,"Figure_Distance_Month.tiff"),
+     type="cairo",
+     units="in", 
+     width=6, #10*1, 
+     height=6, #22*1, 
+     pointsize=5, #12, 
+     res=300,
+     compression="lzw")
+ggplot(data=df_subset_dist) + geom_boxplot(aes(x=as.factor(Month),y=dist_km_facility))
+dev.off()
+
+ggplot(data=df_subset_dist) + geom_point(aes(x=Count,y=dist_km_facility))
+
+tiff(filename=file.path(output_root,"Figure_Distance_Samplesize.tiff"),
+     type="cairo",
+     units="in", 
+     width=6, #10*1, 
+     height=6, #22*1, 
+     pointsize=5, #12, 
+     res=300,
+     compression="lzw")
+ggplot(data=df_subset_dist) + geom_point(aes(x=Count,y=dist_km_facility))
+dev.off()
+
+
+ggplot(data=df_subset_dist) + geom_boxplot(aes(x=as.factor(WY),y=dist_km_facility))
+
+tiff(filename=file.path(output_root,"Figure_Distance_WY.tiff"),
+     type="cairo",
+     units="in", 
+     width=12, #10*1, 
+     height=5, #22*1, 
+     pointsize=5, #12, 
+     res=300,
+     compression="lzw")
+ggplot(data=df_subset_dist) + geom_boxplot(aes(x=as.factor(WY),y=dist_km_facility))+
+  theme(axis.text.x = element_text(angle = 45))
+dev.off()
+
+df_subset_dist<- df_subset_dist%>% mutate(pre2009= ifelse(WY>=2008, "postBiOp","preBiOp"))
+
+df_subset_dist_sum <- df_subset_dist %>% mutate(pre2009= ifelse(WY>=2008, "postBiOp","preBiOp")) %>%
+  group_by(pre2009,Month) %>% summarise(dist_km_facility=mean(dist_km_facility))
+
+summary(lm(data = df_subset_dist, dist_km_facility ~ as.factor(Month) + as.factor(pre2009)))
+summary(lm(data = df_subset_dist, dist_km_facility ~ as.factor(Month) * as.factor(pre2009)))
