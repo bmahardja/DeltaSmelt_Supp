@@ -67,22 +67,26 @@ df_subset_rep<-df_subset_rep[rep(row.names(df_subset_rep),df_subset_rep$Count),1
 df_subset_rep_station <- df_subset_rep %>% group_by(Station) %>% 
   summarise(Longitude=median(Longitude),Latitude=median(Latitude))
 
+# Fix station 20-34-LSSC02 due to site potentially being too close to shore and giving infinite value to Tracy Fish Facility
+df_subset_rep_station$Latitude[df_subset_rep_station$Station == "20-34-LSSC02"] <- 38.374748
+df_subset_rep_station$Longitude[df_subset_rep_station$Station == "20-34-LSSC02"] <- -121.629602
+
+# Station 208 was also a problem, where distance from 208 to Skinner was infinite
+df_subset_rep %>% filter(Station=="208")
+# Upon further inspection, this seems erroneous and probably a mis-identification of Longfin Smelt given that
+# Salinity at surface was almost seawater (32 ppt)
+# Upon inspection of map, it also seems to be incorrect, given that it is the only site past San Pablo Bay where Delta Smelt
+# were ever recorded
+
 # Extract stations at which Delta Smelt were observed and make them spatial
-df_subset_rep_sf <- df_subset_rep %>% group_by(Station) %>% 
-  summarise(Longitude=median(Longitude),Latitude=median(Latitude)) %>%
+df_subset_rep_sf <- df_subset_rep_station %>%
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>%
   st_transform(crs = st_crs(raster_baydelta))
 mapview(df_subset_rep_sf)
 
-#
-#20-34-LSSC02
-#TFCF
-#Inf
-#75
-#208
-#Skinner
-#Inf
-
+# Remove site 208
+df_subset_rep <- df_subset_rep %>% filter(Station != "208")
+df_subset_rep_sf <- df_subset_rep_sf %>% filter(Station != "208")
 
 # Calculate distances with least cost analysis
 dist_facil <- costDistance(raster_baydelta_tr,
@@ -103,20 +107,39 @@ Least_Cost_data_wild <-data.frame(dist_meters = as.vector(as.matrix(dist_facil))
 write.csv(df_subset_rep_station,file=file.path(output_root,"wild_fish_station_data.csv"),row.names = F)
 write.csv(Least_Cost_data_wild,file=file.path(output_root,"wild_fish_leastcost_distance_from_salvage_facilities.csv"),row.names = F)
 
-# Average distance
+# Reload data if not re-running the distance analysis
 Least_Cost_data_wild<- read.csv(file=file.path(output_root,"wild_fish_leastcost_distance_from_salvage_facilities.csv"))
 
-Least_Cost_data_wild_avg <- Least_Cost_data_wild %>% group_by(Station) %>% summarise(dist_km_facility=mean(dist_km))
-df_subset_rep <- df_subset_rep %>% left_join(Least_Cost_data_wild_avg)
+# Start with Skinner facility
+#Least_Cost_data_wild_avg <- Least_Cost_data_wild %>% group_by(Station) %>% summarise(dist_km_facility=mean(dist_km))
+Least_Cost_data_wild_swp <- Least_Cost_data_wild %>% filter(Facility=="Skinner") %>% select(-Facility)
+Least_Cost_data_wild_cvp <- Least_Cost_data_wild %>% filter(Facility=="TFCF") %>% select(-Facility)
 
-df_subset_dist <- df_subset_rep %>% mutate(Month=month(Date)) %>% group_by(WY,Month) %>% 
-  summarise(Date_median=median(Date),dist_km_facility=mean(dist_km_facility),dist_km_sd=sd(dist_km_facility,na.rm=T),Count=sum(Count))
+# Add skinner distance data back to catch data
+df_subset_rep_swp <- df_subset_rep %>% left_join(Least_Cost_data_wild_swp)
 
+# Summarize by month
+df_subset_dist_swp <- df_subset_rep_swp %>% mutate(Month=month(Date)) %>% group_by(WY,Month) %>% 
+  summarise(Date_median=median(Date),dist_km_facility=mean(dist_km),dist_km_sd=sd(dist_km,na.rm=T),Count=sum(Count))
 
-write.csv(df_subset_dist,file=file.path(output_root,"wild_fish_average_distance_from_salvage_facilities.csv"),row.names = F)
+# Add skinner distance data back to catch data
+df_subset_rep_cvp <- df_subset_rep %>% left_join(Least_Cost_data_wild_cvp)
 
-df_subset_dist <- df_subset_dist %>% filter(dist_km_facility != Inf) %>% filter(Count>=20)
+# Summarize by month
+df_subset_dist_cvp <- df_subset_rep_cvp %>% mutate(Month=month(Date)) %>% group_by(WY,Month) %>% 
+  summarise(Date_median=median(Date),dist_km_facility=mean(dist_km),dist_km_sd=sd(dist_km,na.rm=T),Count=sum(Count))
 
+# Export out as csv
+write.csv(df_subset_dist_swp,file=file.path(output_root,"wild_fish_average_distance_from_skinner.csv"),row.names = F)
+write.csv(df_subset_dist_cvp,file=file.path(output_root,"wild_fish_average_distance_from_TFCF.csv"),row.names = F)
+
+##### Extra figures for data exploration
+# Filter out just those with sample size >20
+df_subset_dist <- df_subset_rep_swp %>% filter(Count>=20)
+
+ggplot(data=df_subset_dist) + geom_point(aes(x=dist_km_facility,y=dist_km_sd))
+summary(lm(data=df_subset_dist,dist_km_sd~dist_km_facility))
+#Adjusted R-squared:  0.4213 
 
 ggplot(data=df_subset_dist) + geom_boxplot(aes(x=as.factor(Month),y=dist_km_facility))
 
@@ -145,7 +168,8 @@ ggplot(data=df_subset_dist) + geom_point(aes(x=Count,y=dist_km_facility))
 dev.off()
 
 
-ggplot(data=df_subset_dist) + geom_boxplot(aes(x=as.factor(WY),y=dist_km_facility))
+ggplot(data=df_subset_dist) + geom_boxplot(aes(x=as.factor(WY),y=dist_km_facility))+
+  theme(axis.text.x = element_text(angle = 45))
 
 tiff(filename=file.path(output_root,"Figure_Distance_WY.tiff"),
      type="cairo",
@@ -159,10 +183,3 @@ ggplot(data=df_subset_dist) + geom_boxplot(aes(x=as.factor(WY),y=dist_km_facilit
   theme(axis.text.x = element_text(angle = 45))
 dev.off()
 
-df_subset_dist<- df_subset_dist%>% mutate(pre2009= ifelse(WY>=2008, "postBiOp","preBiOp"))
-
-df_subset_dist_sum <- df_subset_dist %>% mutate(pre2009= ifelse(WY>=2008, "postBiOp","preBiOp")) %>%
-  group_by(pre2009,Month) %>% summarise(dist_km_facility=mean(dist_km_facility))
-
-summary(lm(data = df_subset_dist, dist_km_facility ~ as.factor(Month) + as.factor(pre2009)))
-summary(lm(data = df_subset_dist, dist_km_facility ~ as.factor(Month) * as.factor(pre2009)))

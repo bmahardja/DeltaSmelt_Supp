@@ -75,6 +75,9 @@ df_subset_rep<-df_subset[rep(row.names(df_subset),df_subset$Count),1:28] %>% mut
 # Filter out individuals under 50 mm, add Month column
 df_subset_rep <- df_subset_rep %>% filter(Length>=50) %>% mutate(Month=month(Date))
 
+# Remove data from Station 208 because it may be have been Longfin Smelt instead (32 ppt, all caught in a single sample)
+df_subset_rep <- df_subset_rep %>% filter(Station != "208")
+hist(df_subset_rep$Sal_surf,breaks=30)
 
 # Summarize by month and WY
 df_subset_month_sum <- df_subset_rep %>% group_by(WY, Month) %>%
@@ -83,11 +86,19 @@ df_subset_month_sum <- df_subset_rep %>% group_by(WY, Month) %>%
             Sal_min=min(Sal_surf,na.rm=T),Sal_max=max(Sal_surf,na.rm=T),
             Survey_mostcommon_sal=fmode(as.factor(Source)))
 
-# Filter out data with less than 20 fish
-df_subset_month_sum<- df_subset_month_sum %>% filter(Count_Sal>=20)
+# Look at histogram of sample size by month
+hist(df_subset_month_sum$Count_Sal,breaks=50)
+df_subset_month_sum_100 <- df_subset_month_sum %>% filter(Count_Sal <=100)
+hist(df_subset_month_sum_100$Count_Sal,breaks=30)
+# 20 seems like a good breaking point where it doesn't remove too many observations (~154 data points)
+df_subset_month_20 <- df_subset_month_sum %>% filter(Count_Sal >=20)
 
 # Export out data
 write.csv(df_subset_month_sum,file=file.path(output_root,"wild_fish_salinity_data.csv"),row.names = F)
+
+# Summary of linear regression
+summary(lm(data=df_subset_month_20, Sal_surf_sd ~ Sal_surf_mean))
+# Adjusted R-squared:   0.77 
 
 #Print figures
 tiff(filename=file.path(output_root,"Figure_Salinity_mean_Month.tiff"),
