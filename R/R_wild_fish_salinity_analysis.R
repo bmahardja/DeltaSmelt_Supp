@@ -29,14 +29,14 @@ trctrl <- trainControl(method = "cv", #cross validation
                        number = 10)   #10-fold cross validation
 cp_grid <- data.frame(cp = seq(0.005, .2, .005))
 
-tree_tc <- train(Sal_surf_mean ~ SAC + SJR + TOT + OUT + EXPORTS + X2 + SAC_1 + SJR_1 + TOT_1 + OUT_1 + EXPORTS_1 + X2_1 + mean_OMR + FirstFlushOccurred + as.factor(Month), data = fish_sal_data, method = 'rpart',
+tree_tc <- train(Sal_surf_mean ~ SAC + SJR + TOT + OUT + EXPORTS + X2 + SAC_1 + SJR_1 + TOT_1 + OUT_1 + EXPORTS_1 + X2_1 + mean_OMR + FirstFlushOccurred + as.factor(Month) +Secchi_South +Secchi_West, data = fish_sal_data, method = 'rpart',
                  trControl = trctrl,      
                  tuneGrid = cp_grid)
 tree_tc
-#cp 0.055 being best
+#cp 0.045 being best
 
-fit.tree = rpart(Sal_surf_mean ~ SAC + SJR + TOT + OUT + EXPORTS + X2 + SAC_1 + SJR_1 + TOT_1 + OUT_1 + EXPORTS_1 + X2_1 + mean_OMR + FirstFlushOccurred + as.factor(Month) , data=fish_sal_data, 
-                  method="anova", cp=0.05)
+fit.tree = rpart(Sal_surf_mean ~ SAC + SJR + TOT + OUT + EXPORTS + X2 + SAC_1 + SJR_1 + TOT_1 + OUT_1 + EXPORTS_1 + X2_1 + mean_OMR + FirstFlushOccurred + as.factor(Month) +Secchi_South +Secchi_West, data=fish_sal_data, 
+                  method="anova", cp=0.045)
 rpart.plot(fit.tree)
 fit.tree$variable.importance
 
