@@ -1,9 +1,9 @@
-# Purpose: Prepare swim distance data for analysis for year 1
+# Purpose: Prepare swim distance data for analysis
 # Author: Brian Mahardja
 # Date: 2023-09-22
 
 # Set working directory
-root <- "C:/Users/bmahardja/Documents/GitHub/DeltaSmelt_SwimDistance"
+root <- "~/GitHub/DeltaSmelt_Supp"
 setwd(root)
 
 data_root<-file.path(root,"data")
@@ -15,17 +15,19 @@ library(gdistance)
 library(raster)
 library(sf)
 library(sp)
-library(rgdal)
+#library(rgdal)
 library(tidyverse)
 library(readxl)
 library(ggspatial)
 library(lubridate)
 library(viridis)
 library(readr)
-library(rgeos)
+#library(rgeos)
 library(deltafish)
 library(mapview)
 
+# Read the TIF file so that we can get the proper crs
+raster_baydelta<-raster(file.path(data_root,"baydelta.tif"))
 
 # Read the pre-processed raster file from Ryan since the conversion takes 2 hours 
 raster_baydelta_tr <- readRDS(file.path(data_root,"raster_baydelta_tr.rds"))
@@ -59,9 +61,26 @@ releases_WY23_sf <- release_data_WY23  %>%
   st_transform(crs = st_crs(raster_baydelta))
 mapview(releases_WY23_sf)
 
-# Load running Delta Smelt catch data from Denise, downloaded 11/15/2023
 
-catch_data <- read_excel(file.path(data_root,"Running Delta Smelt Catch_2023-09-05.xlsx"),sheet="Delta Smelt Catch Data") 
+# Add release site and number information for 2024
+release_data_WY24 <- read_excel(file.path(data_root,"2023-2024_release_locations_dates.xlsx")) %>%
+  mutate(Latitude = as.numeric(Latitude),
+         Longitude = as.numeric(Longitude),FirstDayRelease=as.Date(Date, "%m/%d/%Y")) %>%
+  #Change Release Event name to match the catch data
+  mutate(ReleaseEvent = paste("BY2023",Event,sep=" "))
+
+releases_WY24_sf <- release_data_WY24  %>%
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>%
+  st_transform(crs = st_crs(raster_baydelta))
+mapview(releases_WY24_sf)
+
+# Load running Delta Smelt catch data from Denise, downloaded 4/5/2024
+
+catch_data <- read_excel(file.path(data_root,"Running Delta Smelt Catch_2024-04-05.xlsx"),sheet="Delta Smelt Catch Data") 
+###
+catch_t<-catch_data %>% mutate(Year=year(SampleDate),Month=month(SampleDate),Count=1) %>%
+  filter(LifeStage %in% c("Adult")) %>%
+  group_by(Year,Month) %>% summarise(Count=sum(Count))
 
 # Remove unmarked fish and subset for each WY
 catch_data_subset <- catch_data %>% filter(MarkCode != "None") %>% mutate(SampleDate=as.Date(SampleDate)) %>%
@@ -74,10 +93,6 @@ catch_data_subset$Longitude[catch_data_subset$Survey == "Skinner"] <- -121.59553
 
 catch_data_subset$Latitude[catch_data_subset$Survey == "TFCF"] <- 37.816984
 catch_data_subset$Longitude[catch_data_subset$Survey == "TFCF"] <- -121.556881
-
-# Fix the one site on land based on Denise's chat msg 
-catch_data_subset$Latitude[catch_data_subset$StationCode == "23-27-CS03"] <- 38.24102
-catch_data_subset$Longitude[catch_data_subset$StationCode == "23-27-CS03"] <- -121.68774
 
 # Subset just WY22 because their origin is unknown
 catch_data_WY22 <- catch_data_subset %>% filter(SampleDate < as.Date("2022-05-01")) %>%
@@ -97,16 +112,9 @@ catch_data_WY22_sf <- catch_data_WY22 %>%
 mapview(catch_data_WY22_sf)
 
 # Add unique ID to unnamed fish in WY23
-catch_data_WY23 <- catch_data_subset %>% filter(SampleDate > as.Date("2022-05-01"))
+catch_data_WY23 <- catch_data_subset %>% filter(SampleDate > as.Date("2022-05-01")&SampleDate < as.Date("2023-08-01"))
 
 catch_data_WY23$SpecialStudyID[catch_data_WY23$StationCode == "Sherman Island"] <- "FCCL_01"
-catch_data_WY23$SpecialStudyID[catch_data_WY23$StationCode == "23-26-SB05"] <- "FCCL_02"
-
-catch_data_WY23$SpecialStudyID[catch_data_WY23$SampleDate==as.Date("2023-02-12")&catch_data_WY23$Survey == "TFCF"&catch_data_WY23$ForkLength ==63] <- "TFCF_01"
-catch_data_WY23$SpecialStudyID[catch_data_WY23$Survey == "TFCF"&catch_data_WY23$ForkLength ==69] <- "TFCF_02"
-catch_data_WY23$SpecialStudyID[catch_data_WY23$Survey == "TFCF"&catch_data_WY23$ForkLength ==59] <- "TFCF_03"
-catch_data_WY23$SpecialStudyID[catch_data_WY23$SampleDate==as.Date("2023-02-14")&catch_data_WY23$Survey == "TFCF"&catch_data_WY23$ForkLength ==63] <- "TFCF_04"
-
 
 catch_data_WY23$SpecialStudyID <- paste0("WY23_", catch_data_WY23$SpecialStudyID, sep="")
 catch_data_WY23$ReleaseEvent <- gsub(" ", "", catch_data_WY23$ReleaseEvent, fixed = TRUE)
@@ -116,7 +124,21 @@ catch_data_WY23_sf <- catch_data_WY23 %>%
   st_transform(crs = st_crs(raster_baydelta))
 mapview(catch_data_WY23_sf)
 
+# Add unique ID to unnamed fish in WY24
+catch_data_WY24 <- catch_data_subset %>% filter(SampleDate > as.Date("2023-10-01")&SampleDate < as.Date("2024-08-01"))
 
+catch_data_WY24 <- catch_data_WY24 %>% mutate(newID=paste("Salvage",row_number(),sep="_")) %>%
+  mutate(SpecialStudyID=ifelse(is.na(SpecialStudyID),newID,SpecialStudyID))
+
+catch_data_WY24$newID<-NULL
+catch_data_WY24$SpecialStudyID <- paste0("WY24_", catch_data_WY24$SpecialStudyID, sep="")
+
+catch_data_WY24_sf <- catch_data_WY24 %>% 
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>%
+  st_transform(crs = st_crs(raster_baydelta))
+mapview(catch_data_WY24_sf)
+
+#########################
 # Calculate 2022 distances with least cost analysis
 dist_WY22 <- costDistance(raster_baydelta_tr,
                           fromCoords = as(as_Spatial(releases_WY22_sf), "SpatialPoints"),
@@ -133,7 +155,7 @@ Least_Cost_data_2022 <-data.frame(dist_meters = as.vector(as.matrix(dist_WY22)),
   mutate(ReleaseEvent=sub("xxx.*","", comparison),SpecialStudyID=sub(".*xxx","", comparison),dist_km=dist_meters/1000) %>%
   dplyr::select(SpecialStudyID,ReleaseEvent,dist_km) %>% mutate(ReleaseEvent=as.numeric(ReleaseEvent))
 
-dist_data_2022 <- left_join(Least_Cost_data_2022,catch_data_WY22 %>% select(-ReleaseEvent,-ReleaseDate,-ReleaseSite,-ReleaseMethod,-DistanceTraveled), by="SpecialStudyID") %>%
+dist_data_2022 <- left_join(Least_Cost_data_2022,catch_data_WY22 %>% select(-ReleaseEvent,-ReleaseDate,-ReleaseSite,-ReleaseMethod), by="SpecialStudyID") %>%
   left_join(release_info_WY22 %>% rename(ReleaseLongitude=Longitude,ReleaseLatitude=Latitude)) %>%
   #Remove occasions where fish were caught before release date
   dplyr::filter(SampleDate>=FirstDayRelease) %>%
@@ -161,21 +183,52 @@ Least_Cost_data_2023 <-data.frame(dist_meters = as.vector(as.matrix(dist_WY23)),
 dist_data_2023 <- left_join(catch_data_WY23 %>% select(-ReleaseDate,-ReleaseSite,-ReleaseMethod),Least_Cost_data_2023, by=c("SpecialStudyID","ReleaseEvent")) %>%
   left_join(release_data_WY23 %>% rename(ReleaseLongitude=Longitude,ReleaseLatitude=Latitude)) %>%
   mutate(DaySinceRelease=as.numeric(SampleDate-FirstDayRelease)) %>%
-  mutate(swim_speed=dist_km/DaySinceRelease) %>% mutate(DistanceTraveled=as.numeric(DistanceTraveled)*1.60934)
+  mutate(swim_speed=dist_km/DaySinceRelease)
+
+
+# Calculate 2024 distances with least cost analysis
+dist_WY24 <- costDistance(raster_baydelta_tr,
+                          fromCoords = as(as_Spatial(releases_WY24_sf), "SpatialPoints"),
+                          toCoords = as(as_Spatial(catch_data_WY24_sf), "SpatialPoints"))
+
+rownames(dist_WY24)<-as.vector(releases_WY24_sf$ReleaseEvent)
+colnames(dist_WY24)<-as.vector(catch_data_WY24_sf$SpecialStudyID)
+
+
+# Turn back to dataframe
+Least_Cost_data_2024 <-data.frame(dist_meters = as.vector(as.matrix(dist_WY24)),
+                                  comparison = as.vector(outer(Y=colnames(as.matrix(dist_WY24)) ,
+                                                               X=rownames(as.matrix(dist_WY24)) ,
+                                                               paste, sep="xxx"))) %>%
+  mutate(ReleaseEvent=sub("xxx.*","", comparison),SpecialStudyID=sub(".*xxx","", comparison),dist_km=dist_meters/1000) %>%
+  dplyr::select(SpecialStudyID,ReleaseEvent,dist_km) 
+
+
+dist_data_2024 <- left_join(catch_data_WY24 %>% dplyr::select(-ReleaseDate,-ReleaseSite,-ReleaseMethod),Least_Cost_data_2024) %>%
+  left_join(release_data_WY24 %>% rename(ReleaseLongitude=Longitude,ReleaseLatitude=Latitude)) %>%
+  mutate(DaySinceRelease=as.numeric(SampleDate-FirstDayRelease)) %>%
+  mutate(swim_speed=dist_km/DaySinceRelease) 
 
 # Export dataset out
 write.csv(dist_data_2022,file=file.path(output_root,"WY2022_distance_from_release_site.csv"),row.names = F)
 write.csv(dist_data_2023,file=file.path(output_root,"WY2023_distance_from_release_site.csv"),row.names = F)
+write.csv(dist_data_2024,file=file.path(output_root,"WY2024_distance_from_release_site.csv"),row.names = F)
 
 
 ###
 plot(dist_data_2022$swim_speed~dist_data_2022$DaySinceRelease)
 plot(dist_data_2023$swim_speed~dist_data_2023$DaySinceRelease)
+plot(dist_data_2024$swim_speed~dist_data_2024$DaySinceRelease)
+
 plot(dist_data_2022$swim_speed~dist_data_2022$SampleDate)
 plot(dist_data_2023$swim_speed~dist_data_2023$SampleDate)
+plot(dist_data_2024$swim_speed~dist_data_2024$SampleDate)
+
 plot(dist_data_2022$swim_speed~dist_data_2022$ForkLength)
 plot(dist_data_2023$swim_speed~dist_data_2023$ForkLength)
+plot(dist_data_2024$swim_speed~dist_data_2024$ForkLength)
 
 plot(dist_data_2022$dist_km~dist_data_2022$DaySinceRelease)
 plot(dist_data_2023$dist_km~dist_data_2023$DaySinceRelease)
+plot(dist_data_2024$dist_km~dist_data_2024$DaySinceRelease)
 

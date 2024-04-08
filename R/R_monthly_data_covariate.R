@@ -2,12 +2,9 @@
 # Author: Brian Mahardja
 # Date: 2023-12-11
 
-setwd("~/GitHub/salmon_negbinmodel")
-
 library(tidyverse)
 library(rvest)
 library(lubridate)
-library(rgdal)
 library(janitor)
 library(sharpshootR)
 library(deltamapr)
@@ -240,7 +237,7 @@ data_month_combined<- data_month_combined[order(data_month_combined$DateMonth),]
 ##########
 # Pull Freeport data from CDEC
 
-FPT_daily <- CDECquery(id='FPT', sensor=20, interval='D', start=as.Date("1976-10-01"), end=as.Date("2022-12-31"))
+FPT_daily <- CDECquery(id='FPT', sensor=20, interval='D', start=as.Date("1976-10-01"), end=as.Date("2024-04-03"))
 
 # Data contains some zeroes
 #ggplot(data=FPT_daily) + geom_point(aes(x=datetime,y=value))
@@ -272,6 +269,9 @@ FPT_data_add <- dayflow_merged %>% mutate(WY= ifelse(Month>9,Year+1,Year)) %>%
   filter(WY==1976)
 
 FPT_data_firstflush<-rbind(FPT_data_firstflush,FPT_data_add)
+
+# Export 3-day rolling average Freeport flow data for hatchery fish purposes
+write.csv(FPT_data_rollavg,file=file.path(output_root,"Freeport_FirstFlush_data.csv"),row.names = F)
 
 #########
 # Pull water quality data for secchi depth
@@ -688,7 +688,19 @@ fish_dist_data_cvp<-read.csv(file.path(output_root,"wild_fish_average_distance_f
   arrange(Date_median) %>%
   mutate(Secchi_South= na_interpolation(Secchi_South),Secchi_West= na_interpolation(Secchi_West))
 
+fish_dist_data_cache<-read.csv(file.path(output_root,"wild_fish_average_distance_from_Cache.csv")) %>% 
+  left_join(FPT_data_firstflush) %>%
+  mutate(FirstFlushOccurred=ifelse(Date_median>=FirstFlush_firstDate,"Yes","No")) %>%
+  left_join(data_month_combined) %>%
+  # There was never first flush in WY 1977, 2021, and 2022
+  mutate(FirstFlushOccurred=ifelse(is.na(FirstFlushOccurred),"No",FirstFlushOccurred)) %>%
+  # Add secchi data
+  left_join(dt_secchi_wide) %>%
+  # Impute secchi data
+  arrange(Date_median) %>%
+  mutate(Secchi_South= na_interpolation(Secchi_South),Secchi_West= na_interpolation(Secchi_West))
 
 # Export out data again
 write.csv(fish_dist_data_swp,file=file.path(output_root,"wild_fish_SWP_distance_data_with_covariate.csv"),row.names = F)
 write.csv(fish_dist_data_cvp,file=file.path(output_root,"wild_fish_CVP_distance_data_with_covariate.csv"),row.names = F)
+write.csv(fish_dist_data_cache,file=file.path(output_root,"wild_fish_Cache_distance_data_with_covariate.csv"),row.names = F)

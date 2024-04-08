@@ -36,6 +36,7 @@ sp_station <- sp_station %>% filter(StationCode %in% unique(smelt_data_join$Stat
 
 # This doesn't work
 AtoB <- shortestPath(raster_baydelta_tr, sp_releases[1,], sp_station[2,], output="SpatialLines")
+st_crs(sp_station)
 
 # But example data does seem to work with a single point to another single point
 AtoB <- shortestPath(raster_baydelta_tr,c(611515.2,4217818), c(614331.5,4221416), output="SpatialLines")
