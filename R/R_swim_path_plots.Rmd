@@ -21,9 +21,14 @@ library(sp)
 library(ggspatial)
 library(deltamapr)
 library(here)
+library(viridis)
+library(RColorBrewer)
 ```
 
-# Load example fish data
+
+# WY2023
+
+## Load fish data
 ```{r}
 smelt_data_join <- readRDS(here("output/smelt_data_example.rds")) %>%
   mutate(Release = case_when(
@@ -43,11 +48,11 @@ smelt_data_join <- readRDS(here("output/smelt_data_example.rds")) %>%
 # Read in spatial data
 sp_releases <- readRDS(here("output/spatial_release_data_example.rds"))
 sp_station <- readRDS(here("output/spatial_station_data_example.rds"))
-raster_baydelta_tr <- readRDS(here("data/raster_baydelta_tr.rds"))
+# raster_baydelta_tr <- readRDS(here("data/raster_baydelta_tr.rds"))
 # raster_baydelta<-raster(here("data/baydelta.tif"))
 ```
 
-# Reorganize data
+## Reorganize data
 ```{r}
 # Subset station to captured delta smelt
 sp_station <- sp_station %>% filter(StationCode %in% unique(smelt_data_join$StationCode))
@@ -69,7 +74,8 @@ releaseToCatch <- smelt_data_join %>%
   left_join(sf_catch) %>%
   rename(geometryC = geometry)
 ```
-# function for making shortest path lines
+
+## function for making shortest path lines
 ```{r}
 f_lines <- function(x) {
   paths <- shortestPath(raster_baydelta_tr, c(releaseToCatch$lon1[x], releaseToCatch$lat1[x]), 
@@ -78,7 +84,7 @@ f_lines <- function(x) {
 } 
 ```
 
-# Run function to make lines - takes a while
+## Run function to make lines - takes a while
 ```{r, eval = FALSE}
 # lineTest <- lapply(1:nrow(releaseToCatch), f_lines)
 linesbind <- bind_rows(lineTest) %>% 
@@ -87,9 +93,9 @@ linesbind <- bind_rows(lineTest) %>%
 saveRDS(linesbind, file = here("output", "allpaths.rds"), compress = "xz")
 ```
 
-# Plotting - start here
+## Plotting - start here
 
-## Read in data and make df for plotting
+### Read in data and make df for plotting
 ```{r}
 linesbind <- readRDS(here("output", "allpaths.rds"))
 linesbind_df <- cbind(linesbind, 
@@ -102,14 +108,14 @@ sp_release_Tag <- full_join(sp_releases, smelt_data_join %>% dplyr::select(Sampl
   filter(Tag %in% unique(smelt_data_join$Tag))
 ```
 
-## Plotting theme
+### Plotting theme
 ```{r}
 theme_plots <-  
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, size = 10))
 ```
 
-## Plot all lines
+### Plot all lines
 ```{r, fig.width = 8, height = 6.5}
 plot_allreleases <- ggplot() + 
   geom_sf(data=WW_Delta, fill="gray80", color="gray80") + 
@@ -127,7 +133,7 @@ plot_allreleases <- ggplot() +
 plot_allreleases
 ```
 
-## Plot by date
+### Plot by date
 ```{r, fig.width = 7, height = 5}
 ggplot() + 
   geom_sf(data=WW_Delta, fill="gray80", color="gray80") + 
@@ -144,7 +150,7 @@ ggplot() +
   theme_plots 
 ```
 
-## Plot by release and date caught
+### Plot by release and date caught
 ```{r, fig.width=8, fig.height=6.5}
 ggplot() + 
   geom_sf(data=WW_Delta, fill="gray80", color="gray80") + 
@@ -158,7 +164,7 @@ ggplot() +
   theme(legend.position = "top")
 ```
 
-## Plot by release and days traveling (similar to above)
+### Plot by release and days traveling (similar to above)
 ```{r, fig.width=8, fig.height=6.5}
 ggplot() + 
   geom_sf(data=WW_Delta, fill="gray80", color="gray80") + 
@@ -172,7 +178,7 @@ ggplot() +
   theme(legend.position = "top")
 ```
 
-## Plot by release and days traveling with viridis
+### Plot by release and days traveling with viridis
 ```{r, fig.width=8, fig.height=6.5}
 plot_release_days <- ggplot() + 
   geom_sf(data=WW_Delta, fill="gray80", color="gray80") + 
@@ -192,9 +198,7 @@ plot_release_days <- ggplot() +
 
 plot_release_days
 ```
-
 ```{r, eval = FALSE}
-
 png(here("output/Figure_swim_path_release_days.png"), width = 7, height = 6, res = 300, units = "in")
 plot_release_days
 dev.off()
@@ -202,6 +206,199 @@ dev.off()
 png(here("output/Figure_swim_path_all.png"), width = 7, height = 6, res = 300, units = "in")
 plot_allreleases
 dev.off()
+```
+
+### Plot for manuscript: Station size based on catch
+```{r, fig.width=8, fig.height=6.5}
+
+sp_station_Tag_grouped <- sp_station_Tag %>%
+  mutate(Count = 1) %>%
+  group_by(Release, StationCode) %>%
+  summarize(Catch = sum(Count))
+
+
+plot_release_days_stationsize <- ggplot() + 
+  geom_sf(data=WW_Delta, fill="gray80", color="gray80") + 
+  geom_sf(data=linesbind_df, color = "gray30") +
+  geom_sf(data=sp_station_Tag_grouped, aes(size = Catch),  color = "magenta4", shape = 10)+
+  geom_sf(data=sp_release_Tag,color="blue1", shape = 12)+
+  # scale_colour_gradient2(low = "#440154FF",
+  #                        mid = "#31688EFF", 
+  #                        high = "#6DCD59FF",
+  #                        midpoint = 3)+ 
+  xlim(c(-122.2, -121.3)) +
+  ylim(c(37.7, 38.5))+
+  facet_wrap(~Release) +
+  scale_size(range = c(1.5, 4)) + 
+  annotation_north_arrow(location = "tl", which_north = "true",
+                                pad_x = unit(.02, "in"), pad_y = unit(0.03, "in"),
+                         height = unit(0.8, "cm"),
+                         width = unit(0.8, "cm"),
+                                style = north_arrow_fancy_orienteering) +
+        annotation_scale(location = "bl", bar_cols = c("black", "white", "black", "white")) +
+  theme_plots +
+  theme(legend.position = "top")
+
+plot_release_days_stationsize
+```
+
+```{r}
+png(here("output/Figure_swim_path_pointsizes.png"), width = 7, height = 6, res = 300, units = "in")
+plot_release_days_stationsize
+dev.off()
+```
+
+
+# 2024 data 
+## Read data
+```{r}
+data_WY24<-read.csv(here("output", "WY2024_distance_from_release_site.csv"))%>%
+  mutate(SampleDate=as.Date(SampleDate)) %>% mutate(DaysinceNov1=as.numeric(SampleDate-as.Date("2022-11-01"))) %>%
+  mutate(DaysinceNov1_sqr=DaysinceNov1^2) %>%
+  mutate(FirstDayRelease = ymd(FirstDayRelease)) %>%
+  mutate(StationCode = if_else(Survey == "TFCF", "CVP", StationCode))
+  # mutate(Release = case_when(
+  #                           # Tag == "RBP" ~ "11/30 Soft Release",
+  #                            Tag == "LRA" ~ "11/30 Hard Release",
+  #                            Tag == "ROP" ~ "01/18 Hard Release",
+  #                            Tag == "ad" ~ "01/18 Trailer Release",
+  #                            Tag == "RGP" ~ "01/26 Soft Release",
+  #                            Tag == "LOA" ~ "01/25 Hard Release"),
+  #        Release = factor(Release, levels = c("11/30 Hard Release",
+  #                                             # "11/30 Soft Release",
+  #                                             "01/18 Hard Release",
+  #                                             "01/18 Trailer Release",
+  #                                             "01/25 Hard Release",
+  #                                             "01/26 Soft Release")))
+
+smelt_data_join24 <- data_WY24 %>%
+  st_as_sf(coords = c("ReleaseLongitude", "ReleaseLatitude"), crs = 4326, remove = FALSE) %>%
+  st_transform(crs = st_crs(sf_release))%>%
+  mutate(lon1 = st_coordinates(.)[,1], lat1 = st_coordinates(.)[,2]) %>%
+  mutate(Count = 1,
+         FirstDayRelease = ymd(FirstDayRelease)) %>%
+  dplyr::select(SampleDate, Survey, Count, 
+                Tag = `Release.tag.`, 
+                Mark = MarkCode, StationCode, FirstDayRelease, 
+                `Release Type` = `Release.methods.`, DaySinceRelease, Event, lon1, lat1) %>%
+  group_by(SampleDate, Survey, 
+                Tag, Mark , StationCode, 
+                `Release Type` , FirstDayRelease, DaySinceRelease, Event, lon1 ,lat1) %>%
+  summarize(Count = sum(Count)) %>%
+  ungroup()
+
+sf_release24 <- data_WY24 %>% 
+  mutate(Year = 3) %>%
+  dplyr::select(Year, Event, FirstDayRelease, DaySinceRelease, `Release Type` = `Release.methods.`, Tag = `Release.tag.`, lon1 = ReleaseLongitude,lat1 = ReleaseLatitude) %>%
+  st_as_sf(coords = c("lon1", "lat1"), crs = 4326) %>%
+  st_transform(crs = st_crs(sf_release))%>%
+  mutate(lon1 = st_coordinates(.)[,1], lat1 = st_coordinates(.)[,2])
+
+sf_catch24 <- data_WY24%>%
+  dplyr::select(StationCode, Survey, Event, lon2=Longitude, lat2=Latitude) %>%
+  st_as_sf(coords = c("lon2", "lat2"), crs = 4326)%>%
+  st_transform(crs = st_crs(sf_release)) %>%
+  mutate(lon2 = st_coordinates(geometry)[,1], lat2 = st_coordinates(geometry)[,2])
+
+sf_station24 <- sf_catch24 %>%
+  distinct()
+
+# The row numbers aren't matching up with smelt_data_join24... probably need a sampleID somewhere.
+releaseToCatch24 <- smelt_data_join24 %>% st_drop_geometry() %>%
+  left_join(sf_release24) %>%
+  distinct() %>%
+  rename(geometryR = geometry) %>%
+  left_join(sf_catch24) %>%
+  rename(geometryC = geometry) %>%
+  distinct()
+```
+
+# Run function to make lines - takes a while
+```{r, eval = FALSE}
+
+f_lines24 <- function(x) {
+  paths <- shortestPath(raster_baydelta_tr, c(releaseToCatch24$lon1[x], releaseToCatch24$lat1[x]), 
+                      c(releaseToCatch24$lon2[x], releaseToCatch24$lat2[x]), output = "SpatialLines")
+  line <- sf::st_as_sf(paths)
+} 
+
+x=1
+result <- shortestPath(raster_baydelta_tr, c(releaseToCatch24$lon1[x], releaseToCatch24$lat1[x]), 
+                      c(releaseToCatch24$lon2[x], releaseToCatch24$lat2[x]), output = "SpatialLines")
+
+
+
+lineTest24 <- lapply(1:nrow(releaseToCatch24), f_lines24)
+linesbind24 <- bind_rows(lineTest24) %>% 
+  st_as_sf() %>% 
+  st_set_crs(st_crs(sp_station)) 
+saveRDS(linesbind24, file = here("output", "allpaths24.rds"), compress = "xz")
+```
+
+# Plotting - start here
+
+## Read in data and make df for plotting
+```{r}
+linesbind24 <- readRDS(here("output", "allpaths24.rds"))
+linesbind24_df <- cbind(linesbind24[-46,], 
+                      smelt_data_join24 %>% dplyr::select(SampleDate, Tag, `Release Type`, StationCode, FirstDayRelease, Event)) %>%
+  mutate(days = as.numeric(SampleDate-FirstDayRelease))%>%
+  mutate(Release = case_when(Event == "LS1" ~ "11/15 LS Hard",
+                             Event == "LS2" ~ "1/10 LS Hard",
+                             Event == "3a" ~ "1/24 Hard",
+                             Event == "3b" ~ "1/25 Soft",
+                             Event == "4a" ~ "1/31 Trailer",
+                             Event == "4b" ~ "1/30 Soft",
+                             Event == "1a" ~ "12/12 Hard",
+                             Event == "1b" ~ "12/14 Soft"))%>%
+  mutate(Release = factor(Release, levels = c("11/15 LS Hard","12/12 Hard",
+                                              "12/14 Soft","1/10 LS Hard","1/24 Hard",
+                                              "1/25 Soft","1/30 Soft","1/31 Trailer")))
 
 ```
 
+```{r, fig.width=8, fig.height=6.5}
+sf_stations_grouped <- sf_catch24 %>%
+  mutate(Count = 1) %>%
+  group_by(Event, StationCode) %>%
+  summarize(Catch = sum(Count)) %>%
+  ungroup() %>%
+  mutate(Release = case_when(Event == "LS1" ~ "11/15 LS Hard",
+                             Event == "LS2" ~ "1/10 LS Hard",
+                             Event == "3a" ~ "1/24 Hard",
+                             Event == "3b" ~ "1/25 Soft",
+                             Event == "4a" ~ "1/31 Trailer",
+                             Event == "4b" ~ "1/30 Soft",
+                             Event == "1a" ~ "12/12 Hard",
+                             Event == "1b" ~ "12/14 Soft"))%>%
+  mutate(Release = factor(Release, levels = c("11/15 LS Hard","12/12 Hard",
+                                              "12/14 Soft","1/10 LS Hard","1/24 Hard",
+                                              "1/25 Soft","1/30 Soft","1/31 Trailer")))
+                     
+
+plot_catch24 <- ggplot() + 
+  geom_sf(data=WW_Delta, fill="gray80", color="gray80") + 
+  geom_sf(data=linesbind24_df, color = "gray30") +
+  geom_sf(data=sf_stations_grouped, aes(size = Catch),  color = "magenta4", shape = 10)+
+  geom_sf(data=sf_release24,color="blue1", shape = 12)+
+  xlim(c(-122.2, -121.3)) +
+  ylim(c(37.7, 38.5))+
+  facet_wrap(~Release) +
+  scale_size(range = c(1.5, 4)) + 
+  annotation_north_arrow(location = "tl", which_north = "true",
+                                pad_x = unit(.02, "in"), pad_y = unit(0.03, "in"),
+                         height = unit(0.8, "cm"),
+                         width = unit(0.8, "cm"),
+                                style = north_arrow_fancy_orienteering) +
+        annotation_scale(location = "bl", bar_cols = c("black", "white", "black", "white")) +
+  theme_plots +
+  theme(legend.position = "none")
+
+plot_catch24
+```
+
+```{r}
+png(here("output/Figure_swim_path24.png"), width = 7, height = 8, res = 300, units = "in")
+plot_catch24
+dev.off()
+```
