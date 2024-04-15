@@ -231,19 +231,19 @@ plot_release_days_stationsize <- ggplot() +
   facet_wrap(~Release) +
   scale_size(range = c(1.5, 4)) + 
   annotation_north_arrow(location = "tl", which_north = "true",
-                                pad_x = unit(.02, "in"), pad_y = unit(0.03, "in"),
+                                pad_x = unit(.02, "in"), pad_y = unit(0.07, "in"),
                          height = unit(0.8, "cm"),
                          width = unit(0.8, "cm"),
                                 style = north_arrow_fancy_orienteering) +
         annotation_scale(location = "bl", bar_cols = c("black", "white", "black", "white")) +
   theme_plots +
-  theme(legend.position = "top")
+  theme(legend.position = "none")
 
 plot_release_days_stationsize
 ```
 
 ```{r}
-png(here("output/Figure_swim_path_pointsizes.png"), width = 7, height = 6, res = 300, units = "in")
+png(here("output/Figure_swim_path23.png"), width = 7, height = 6, res = 300, units = "in")
 plot_release_days_stationsize
 dev.off()
 ```
@@ -328,7 +328,7 @@ result <- shortestPath(raster_baydelta_tr, c(releaseToCatch24$lon1[x], releaseTo
 
 
 
-lineTest24 <- lapply(1:nrow(releaseToCatch24), f_lines24)
+# lineTest24 <- lapply(1:nrow(releaseToCatch24), f_lines24)
 linesbind24 <- bind_rows(lineTest24) %>% 
   st_as_sf() %>% 
   st_set_crs(st_crs(sp_station)) 
@@ -386,7 +386,7 @@ plot_catch24 <- ggplot() +
   facet_wrap(~Release) +
   scale_size(range = c(1.5, 4)) + 
   annotation_north_arrow(location = "tl", which_north = "true",
-                                pad_x = unit(.02, "in"), pad_y = unit(0.03, "in"),
+                                pad_x = unit(.02, "in"), pad_y = unit(0.07, "in"),
                          height = unit(0.8, "cm"),
                          width = unit(0.8, "cm"),
                                 style = north_arrow_fancy_orienteering) +
